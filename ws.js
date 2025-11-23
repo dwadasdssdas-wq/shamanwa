@@ -20,12 +20,12 @@ exports.handler = async (event, context) => {
             const { type, clientId, x, y, key, command, event: eventType } = body;
             const connectionId = requestContext.connectionId;
             
-            // Store client ID
+            
             if (clientId && !connections.get(connectionId).clientId) {
                 connections.get(connectionId).clientId = clientId;
             }
             
-            // Broadcast to all connected clients
+            
             broadcastToAll({
                 type: 'COMMAND',
                 clientId: clientId,
@@ -53,11 +53,11 @@ exports.handler = async (event, context) => {
 function broadcastToAll(message) {
     connections.forEach((info, connectionId) => {
         try {
-            // In real implementation, you would send to actual WebSocket connections
-            // This is simplified for Netlify Functions
+         
             console.log('Broadcasting to:', connectionId, message);
         } catch (error) {
             console.error('Broadcast error:', error);
         }
     });
 }
+
