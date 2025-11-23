@@ -1,81 +1,63 @@
 const WebSocket = require('ws');
-const clients = new Map();
 
-exports.handler = async (event) => {
+const connections = new Map();
+
+exports.handler = async (event, context) => {
     const { requestContext } = event;
     
     if (requestContext.eventType === 'CONNECT') {
-        console.log('Client connected:', requestContext.connectionId);
+        console.log('Direct connection established:', requestContext.connectionId);
+        connections.set(requestContext.connectionId, {
+            connectedAt: new Date(),
+            clientId: null
+        });
         return { statusCode: 200, body: 'Connected' };
     }
     
     if (requestContext.eventType === 'MESSAGE') {
         try {
             const body = JSON.parse(event.body);
-            const { action, clientId, coordinates, key, command } = body;
+            const { type, clientId, x, y, key, command, event: eventType } = body;
+            const connectionId = requestContext.connectionId;
             
-            switch(action) {
-                case 'GET_SCREEN':
-                    // Broadcast to all clients to capture screen
-                    broadcast({ action: 'CAPTURE_SCREEN', clientId });
-                    break;
-                    
-                case 'MOUSE_DOWN':
-                case 'MOUSE_MOVE':
-                case 'MOUSE_UP':
-                    broadcast({ 
-                        action: 'MOUSE_EVENT', 
-                        clientId,
-                        coordinates,
-                        type: action
-                    });
-                    break;
-                    
-                case 'KEY_PRESS':
-                    broadcast({
-                        action: 'KEY_EVENT',
-                        clientId,
-                        key: key
-                    });
-                    break;
-                    
-                case 'SPECIAL_COMMAND':
-                    broadcast({
-                        action: 'SPECIAL_COMMAND',
-                        clientId,
-                        command: command
-                    });
-                    break;
-                    
-                case 'PING':
-                    // Keep connection alive
-                    break;
+            // Store client ID
+            if (clientId && !connections.get(connectionId).clientId) {
+                connections.get(connectionId).clientId = clientId;
             }
+            
+            // Broadcast to all connected clients
+            broadcastToAll({
+                type: 'COMMAND',
+                clientId: clientId,
+                data: body,
+                timestamp: new Date().toISOString()
+            });
             
             return { statusCode: 200, body: 'OK' };
             
         } catch (error) {
-            console.error('Message handling error:', error);
+            console.error('Message processing error:', error);
             return { statusCode: 500, body: 'Error' };
         }
     }
     
     if (requestContext.eventType === 'DISCONNECT') {
-        console.log('Client disconnected:', requestContext.connectionId);
+        console.log('Connection closed:', requestContext.connectionId);
+        connections.delete(requestContext.connectionId);
         return { statusCode: 200, body: 'Disconnected' };
     }
     
-    return { statusCode: 400, body: 'Unknown event type' };
+    return { statusCode: 400, body: 'Unknown event' };
 };
 
-function broadcast(message) {
-    clients.forEach((client, clientId) => {
+function broadcastToAll(message) {
+    connections.forEach((info, connectionId) => {
         try {
-            if (client.readyState === WebSocket.OPEN) {
-                client.send(JSON.stringify(message));
-            }
+            // In real implementation, you would send to actual WebSocket connections
+            // This is simplified for Netlify Functions
+            console.log('Broadcasting to:', connectionId, message);
         } catch (error) {
-            console.error('Broadcast error to client', clientId, error);
+            console.error('Broadcast error:', error);
         }
     });
 }
