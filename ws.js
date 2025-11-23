@@ -1,41 +1,38 @@
 const WebSocket = require('ws');
+const clients = new Set();
 
-const wss = new WebSocket.Server({ noServer: true });
-const connections = new Set();
-
-wss.on('connection', function connection(ws) {
-    connections.add(ws);
-    console.log('Client connected');
+exports.handler = async (event) => {
+    if (event.requestContext.eventType === 'CONNECT') {
+        return { statusCode: 200, body: 'Connected' };
+    }
     
-    ws.on('message', function message(data) {
-        // Пересылаем команды между клиентами
-        connections.forEach(client => {
-            if (client !== ws && client.readyState === WebSocket.OPEN) {
-                client.send(data);
-            }
-        });
-    });
-
-    ws.on('close', function() {
-        connections.delete(ws);
-        console.log('Client disconnected');
-    });
-});
-
-exports.handler = async (event, context) => {
-    if (event.requestContext) {
-        try {
-            const { upgrade } = event.requestContext;
-            if (upgrade) {
-                wss.handleUpgrade(event, event.requestContext.socket, 
-                    event.requestContext.head, (ws) => {
-                    wss.emit('connection', ws, event);
-                });
-                return { statusCode: 101 };
-            }
-        } catch (err) {
-            return { statusCode: 500, body: 'Error' };
+    if (event.requestContext.eventType === 'MESSAGE') {
+        const body = JSON.parse(event.body);
+        const { action, data, clientId } = body;
+        
+        if (action === 'AUTH' && data.password === 'shaman666') {
+            clients.add(clientId);
+            return { statusCode: 200, body: JSON.stringify({ action: 'AUTH_SUCCESS' }) };
+        }
+        
+        if (action === 'COMMAND' && clients.has(clientId)) {
+            broadcastToClients({ action: 'EXECUTE', data: data.command });
+            return { statusCode: 200, body: 'OK' };
+        }
+        
+        if (action === 'SCREEN_DATA') {
+            broadcastToClients({ action: 'SCREEN_UPDATE', data: data.image });
+            return { statusCode: 200, body: 'OK' };
         }
     }
-    return { statusCode: 400, body: 'Not WebSocket' };
+    
+    return { statusCode: 400, body: 'Invalid request' };
 };
+
+function broadcastToClients(message) {
+    clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify(message));
+        }
+    });
+}
