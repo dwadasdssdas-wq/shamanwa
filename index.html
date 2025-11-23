@@ -4,85 +4,252 @@
     <title>Remote Control</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body { margin: 0; padding: 20px; background: #000; }
-        #auth { text-align: center; margin-top: 50px; }
-        #control { display: none; }
-        #screen { width: 100%; border: 1px solid #333; }
-        .btn { padding: 10px; margin: 5px; background: #555; color: white; border: none; }
+        body { margin: 0; padding: 20px; background: #000; color: white; }
+        #screen { 
+            width: 100%; 
+            max-width: 1000px;
+            border: 2px solid #444;
+            image-rendering: pixelated;
+        }
+        .control-panel {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.8);
+            padding: 10px;
+            border-radius: 10px;
+        }
+        .btn {
+            padding: 12px 20px;
+            margin: 5px;
+            background: #333;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        .btn:active {
+            background: #555;
+        }
+        .status {
+            padding: 10px;
+            text-align: center;
+            font-family: monospace;
+        }
+        .touch-area {
+            width: 100%;
+            height: 70vh;
+            background: transparent;
+            position: relative;
+            touch-action: none;
+        }
     </style>
 </head>
 <body>
-    <div id="auth">
-        <input type="password" id="password" placeholder="Password">
-        <button onclick="connect()">Connect</button>
-    </div>
+    <div class="status" id="status">Connecting...</div>
     
-    <div id="control">
-        <img id="screen" onmousedown="handleTouch(event)" ontouchstart="handleTouch(event)">
+    <div class="touch-area" id="touchArea">
+        <img id="screen" style="width:100%; height:auto;">
+    </div>
+
+    <div class="control-panel">
         <div>
-            <button class="btn" onclick="sendKey('Enter')">Enter</button>
+            <button class="btn" onclick="sendKey('Enter')">ENTER</button>
             <button class="btn" onclick="sendKey('Escape')">ESC</button>
-            <button class="btn" onclick="sendKey('Tab')">Tab</button>
+            <button class="btn" onclick="sendKey('Tab')">TAB</button>
+            <button class="btn" onclick="sendKey('Space')">SPACE</button>
+            <button class="btn" onclick="sendKey('Back')">BACK</button>
+        </div>
+        <div>
+            <button class="btn" onclick="sendSpecial('CTRL_ALT_DEL')">Ctrl+Alt+Del</button>
+            <button class="btn" onclick="sendSpecial('ALT_TAB')">Alt+Tab</button>
+            <button class="btn" onclick="sendSpecial('WIN')">Win</button>
         </div>
     </div>
 
     <script>
-        let ws;
-        const clientId = Math.random().toString(36).substr(2, 9);
-        
+        let ws = null;
+        let isConnected = false;
+        const clientId = generateId();
+        const serverUrl = 'wss://your-app.netlify.app/.netlify/functions/ws';
+
+        function generateId() {
+            return 'client_' + Math.random().toString(36).substr(2, 16);
+        }
+
         function connect() {
-            if (document.getElementById('password').value !== 'shaman666') {
-                alert('Invalid password');
-                return;
-            }
-            
-            ws = new WebSocket('wss://your-netlify-app.netlify.app/.netlify/functions/ws');
-            ws.onopen = () => {
-                ws.send(JSON.stringify({ action: 'AUTH', data: { password: 'shaman666' }, clientId }));
-            };
-            
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                if (data.action === 'AUTH_SUCCESS') {
-                    document.getElementById('auth').style.display = 'none';
-                    document.getElementById('control').style.display = 'block';
+            try {
+                ws = new WebSocket(serverUrl);
+                
+                ws.onopen = function() {
+                    console.log('WebSocket connected');
+                    isConnected = true;
+                    document.getElementById('status').textContent = 'Connected - Screen streaming active';
+                    document.getElementById('status').style.color = '#0f0';
                     startScreenStream();
-                } else if (data.action === 'SCREEN_UPDATE') {
-                    document.getElementById('screen').src = 'data:image/jpeg;base64,' + data.data;
-                }
-            };
+                };
+
+                ws.onmessage = function(event) {
+                    if (typeof event.data === 'string') {
+                        const data = JSON.parse(event.data);
+                        handleMessage(data);
+                    } else {
+                        // Binary data - screen image
+                        const blob = new Blob([event.data], {type: 'image/jpeg'});
+                        const url = URL.createObjectURL(blob);
+                        document.getElementById('screen').src = url;
+                    }
+                };
+
+                ws.onclose = function() {
+                    console.log('WebSocket disconnected');
+                    isConnected = false;
+                    document.getElementById('status').textContent = 'Disconnected - Reconnecting...';
+                    document.getElementById('status').style.color = '#f00';
+                    setTimeout(connect, 3000);
+                };
+
+                ws.onerror = function(error) {
+                    console.error('WebSocket error:', error);
+                };
+
+            } catch (error) {
+                console.error('Connection error:', error);
+                setTimeout(connect, 5000);
+            }
         }
-        
-        function handleTouch(event) {
-            event.preventDefault();
-            const rect = event.target.getBoundingClientRect();
-            const x = (event.clientX - rect.left) * (1920 / rect.width);
-            const y = (event.clientY - rect.top) * (1080 / rect.height);
-            
-            ws.send(JSON.stringify({ 
-                action: 'COMMAND', 
-                data: { command: `CLICK|${x},${y}` },
-                clientId 
-            }));
+
+        function handleMessage(data) {
+            switch(data.action) {
+                case 'MOUSE_MOVE':
+                case 'MOUSE_CLICK':
+                case 'KEY_PRESS':
+                    console.log('Command executed:', data.action);
+                    break;
+                case 'ERROR':
+                    console.error('Server error:', data.message);
+                    break;
+            }
         }
-        
-        function sendKey(key) {
-            ws.send(JSON.stringify({
-                action: 'COMMAND',
-                data: { command: `KEY|${key}` },
-                clientId
-            }));
-        }
-        
+
         function startScreenStream() {
             setInterval(() => {
-                ws.send(JSON.stringify({
-                    action: 'COMMAND',
-                    data: { command: 'SCREEN' },
-                    clientId
-                }));
-            }, 100);
+                if (isConnected && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        action: 'GET_SCREEN',
+                        clientId: clientId,
+                        timestamp: Date.now()
+                    }));
+                }
+            }, 100); // 10 FPS
         }
+
+        // Touch handling for mobile control
+        let isTouching = false;
+        const touchArea = document.getElementById('touchArea');
+        
+        touchArea.addEventListener('touchstart', handleTouchStart, {passive: false});
+        touchArea.addEventListener('touchmove', handleTouchMove, {passive: false});
+        touchArea.addEventListener('touchend', handleTouchEnd, {passive: false});
+        
+        touchArea.addEventListener('mousedown', handleMouseDown);
+        touchArea.addEventListener('mousemove', handleMouseMove);
+        touchArea.addEventListener('mouseup', handleMouseUp);
+
+        function handleTouchStart(e) {
+            e.preventDefault();
+            isTouching = true;
+            const touch = e.touches[0];
+            sendMouseEvent('MOUSE_DOWN', touch.clientX, touch.clientY);
+        }
+
+        function handleTouchMove(e) {
+            e.preventDefault();
+            if (!isTouching) return;
+            const touch = e.touches[0];
+            sendMouseEvent('MOUSE_MOVE', touch.clientX, touch.clientY);
+        }
+
+        function handleTouchEnd(e) {
+            e.preventDefault();
+            isTouching = false;
+            const touch = e.changedTouches[0];
+            sendMouseEvent('MOUSE_UP', touch.clientX, touch.clientY);
+        }
+
+        function handleMouseDown(e) {
+            isTouching = true;
+            sendMouseEvent('MOUSE_DOWN', e.clientX, e.clientY);
+        }
+
+        function handleMouseMove(e) {
+            if (!isTouching) return;
+            sendMouseEvent('MOUSE_MOVE', e.clientX, e.clientY);
+        }
+
+        function handleMouseUp(e) {
+            isTouching = false;
+            sendMouseEvent('MOUSE_UP', e.clientX, e.clientY);
+        }
+
+        function sendMouseEvent(action, clientX, clientY) {
+            if (!isConnected) return;
+            
+            const screenImg = document.getElementById('screen');
+            const rect = screenImg.getBoundingClientRect();
+            
+            // Calculate coordinates relative to screen image
+            const x = Math.round((clientX - rect.left) * (1920 / rect.width));
+            const y = Math.round((clientY - rect.top) * (1080 / rect.height));
+            
+            ws.send(JSON.stringify({
+                action: action,
+                clientId: clientId,
+                coordinates: { x: x, y: y },
+                timestamp: Date.now()
+            }));
+        }
+
+        function sendKey(key) {
+            if (!isConnected) return;
+            
+            ws.send(JSON.stringify({
+                action: 'KEY_PRESS',
+                clientId: clientId,
+                key: key,
+                timestamp: Date.now()
+            }));
+        }
+
+        function sendSpecial(command) {
+            if (!isConnected) return;
+            
+            ws.send(JSON.stringify({
+                action: 'SPECIAL_COMMAND',
+                clientId: clientId,
+                command: command,
+                timestamp: Date.now()
+            }));
+        }
+
+        // Auto-connect on load
+        window.addEventListener('load', connect);
+        
+        // Prevent context menu on touch area
+        touchArea.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        // Keep connection alive
+        setInterval(() => {
+            if (isConnected && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    action: 'PING',
+                    clientId: clientId,
+                    timestamp: Date.now()
+                }));
+            }
+        }, 30000);
+
     </script>
 </body>
 </html>
