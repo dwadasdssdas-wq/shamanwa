@@ -1,216 +1,88 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Mobile Remote Control</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Remote Control</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: #000; color: white; font-family: Arial; overflow: hidden; height: 100vh; }
-        
-        #auth { 
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: #111; display: flex; flex-direction: column; 
-            justify-content: center; align-items: center; z-index: 1000; 
-        }
-        
-        #auth input { 
-            padding: 15px; margin: 10px; width: 80%; max-width: 300px; 
-            border: 1px solid #333; background: #222; color: white; border-radius: 5px;
-            font-size: 16px;
-        }
-        
-        #auth button { 
-            padding: 15px 30px; background: #007acc; color: white; 
-            border: none; border-radius: 5px; cursor: pointer; font-size: 16px;
-        }
-        
-        .password-hint {
-            color: #666;
-            font-size: 12px;
-            margin-top: 5px;
-        }
-        
-        #remote { display: none; }
-        #screen { 
-            width: 100%; height: 100vh; object-fit: contain; 
-            background: #000; touch-action: none;
-        }
-        
-        .controls {
-            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-            display: flex; gap: 10px; z-index: 100;
-        }
-        
-        .control-btn {
-            padding: 12px 20px; background: rgba(0,122,204,0.8); color: white;
-            border: none; border-radius: 8px; font-size: 14px;
-        }
-        
-        .status {
-            position: fixed; top: 10px; right: 10px; padding: 5px 10px;
-            background: rgba(0,0,0,0.7); border-radius: 5px; font-size: 12px;
-        }
-        
-        .debug {
-            position: fixed; top: 10px; left: 10px; padding: 5px 10px;
-            background: rgba(0,0,0,0.7); border-radius: 5px; font-size: 10px;
-            color: #0f0;
-        }
+        body { margin: 0; padding: 20px; background: #000; }
+        #auth { text-align: center; margin-top: 50px; }
+        #control { display: none; }
+        #screen { width: 100%; border: 1px solid #333; }
+        .btn { padding: 10px; margin: 5px; background: #555; color: white; border: none; }
     </style>
 </head>
 <body>
     <div id="auth">
-        <h2>🔒 Remote Access</h2>
-        <input type="password" id="password" placeholder="Enter password: shaman666">
-        <div class="password-hint">Password: <strong>shaman666</strong></div>
-        <button onclick="checkAuth()">Connect</button>
-        <div id="authError" style="color: red; margin-top: 10px;"></div>
+        <input type="password" id="password" placeholder="Password">
+        <button onclick="connect()">Connect</button>
     </div>
-
-    <div id="remote">
-        <img id="screen" src="" alt="Remote screen">
-        <div class="debug" id="debug">Ready</div>
-        <div class="status" id="status">Disconnected</div>
-        <div class="controls">
-            <button class="control-btn" onclick="sendClick()">Tap</button>
-            <button class="control-btn" onclick="sendRightClick()">Right</button>
-            <button class="control-btn" onclick="sendKey('{ENTER}')">Enter</button>
-            <button class="control-btn" onclick="sendKey('{ESC}')">ESC</button>
+    
+    <div id="control">
+        <img id="screen" onmousedown="handleTouch(event)" ontouchstart="handleTouch(event)">
+        <div>
+            <button class="btn" onclick="sendKey('Enter')">Enter</button>
+            <button class="btn" onclick="sendKey('Escape')">ESC</button>
+            <button class="btn" onclick="sendKey('Tab')">Tab</button>
         </div>
     </div>
 
     <script>
-        const PASSWORD = "shaman666";
-        let ws = null;
-        let screen = document.getElementById('screen');
-        let status = document.getElementById('status');
-        let debug = document.getElementById('debug');
-        
-        function checkAuth() {
-            const input = document.getElementById('password').value.trim();
-            console.log("Password check:", input, "Expected:", PASSWORD);
-            
-            if (input === PASSWORD) {
-                document.getElementById('auth').style.display = 'none';
-                document.getElementById('remote').style.display = 'block';
-                connect();
-            } else {
-                document.getElementById('authError').textContent = 
-                    'Wrong password! Use: shaman666 (all lowercase, no spaces)';
-                console.log("Password mismatch");
-            }
-        }
+        let ws;
+        const clientId = Math.random().toString(36).substr(2, 9);
         
         function connect() {
-            // ПРАВИЛЬНЫЙ URL ДЛЯ NETLIFY FUNCTIONS
-            const wsUrl = 'wss://shamantop.netlify.app/.netlify/functions/ws';
-            debug.textContent = `Connecting to: ${wsUrl}`;
-            console.log("WebSocket URL:", wsUrl);
-            
-            ws = new WebSocket(wsUrl);
-            
-            ws.onopen = () => {
-                status.textContent = 'Connected ✓';
-                status.style.color = '#0f0';
-                debug.textContent = 'WebSocket connected';
-                console.log("WebSocket connected successfully");
-            };
-            
-            ws.onmessage = (event) => {
-                if (event.data instanceof Blob) {
-                    const url = URL.createObjectURL(event.data);
-                    screen.src = url;
-                    debug.textContent = `Frame received: ${new Date().toLocaleTimeString()}`;
-                } else {
-                    console.log("Text message:", event.data);
-                }
-            };
-            
-            ws.onerror = (error) => {
-                console.error("WebSocket error:", error);
-                status.textContent = 'Connection Error';
-                status.style.color = 'red';
-                debug.textContent = 'WebSocket error - check function';
-            };
-            
-            ws.onclose = (event) => {
-                console.log("WebSocket closed:", event.code, event.reason);
-                status.textContent = 'Disconnected';
-                status.style.color = 'red';
-                debug.textContent = `Disconnected - reconnecting in 3s (code: ${event.code})`;
-                setTimeout(connect, 3000);
-            };
-            
-            // Управление касаниями
-            screen.addEventListener('touchstart', handleTouch);
-            screen.addEventListener('touchmove', handleTouch);
-            screen.addEventListener('touchend', handleTouchEnd);
-        }
-        
-        function handleTouch(e) {
-            e.preventDefault();
-            if (!e.touches[0]) return;
-            
-            const touch = e.touches[0];
-            const rect = screen.getBoundingClientRect();
-            
-            // Проверяем что изображение загружено
-            if (screen.naturalWidth === 0) {
-                console.log("Screen not loaded yet");
+            if (document.getElementById('password').value !== 'shaman666') {
+                alert('Invalid password');
                 return;
             }
             
-            const scaleX = screen.naturalWidth / rect.width;
-            const scaleY = screen.naturalHeight / rect.height;
+            ws = new WebSocket('wss://your-netlify-app.netlify.app/.netlify/functions/ws');
+            ws.onopen = () => {
+                ws.send(JSON.stringify({ action: 'AUTH', data: { password: 'shaman666' }, clientId }));
+            };
             
-            const x = Math.max(0, (touch.clientX - rect.left) * scaleX);
-            const y = Math.max(0, (touch.clientY - rect.top) * scaleY);
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.action === 'AUTH_SUCCESS') {
+                    document.getElementById('auth').style.display = 'none';
+                    document.getElementById('control').style.display = 'block';
+                    startScreenStream();
+                } else if (data.action === 'SCREEN_UPDATE') {
+                    document.getElementById('screen').src = 'data:image/jpeg;base64,' + data.data;
+                }
+            };
+        }
+        
+        function handleTouch(event) {
+            event.preventDefault();
+            const rect = event.target.getBoundingClientRect();
+            const x = (event.clientX - rect.left) * (1920 / rect.width);
+            const y = (event.clientY - rect.top) * (1080 / rect.height);
             
-            if (ws?.readyState === WebSocket.OPEN) {
-                ws.send(`MOVE|${Math.round(x)}|${Math.round(y)}`);
-            }
-        }
-        
-        function handleTouchEnd(e) {
-            e.preventDefault();
-            if (ws?.readyState === WebSocket.OPEN) {
-                ws.send('CLICK|');
-                console.log("Click sent");
-            }
-        }
-        
-        function sendClick() {
-            if (ws?.readyState === WebSocket.OPEN) {
-                ws.send('CLICK|');
-                console.log("Manual click sent");
-            }
-        }
-        
-        function sendRightClick() {
-            if (ws?.readyState === WebSocket.OPEN) {
-                ws.send('RIGHT|');
-                console.log("Right click sent");
-            }
+            ws.send(JSON.stringify({ 
+                action: 'COMMAND', 
+                data: { command: `CLICK|${x},${y}` },
+                clientId 
+            }));
         }
         
         function sendKey(key) {
-            if (ws?.readyState === WebSocket.OPEN) {
-                ws.send(`KEY|${key}`);
-                console.log("Key sent:", key);
-            }
+            ws.send(JSON.stringify({
+                action: 'COMMAND',
+                data: { command: `KEY|${key}` },
+                clientId
+            }));
         }
         
-        // Enter для авторизации
-        document.getElementById('password').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') checkAuth();
-        });
-        
-        // Автофокус на поле пароля
-        document.getElementById('password').focus();
-        
-        // Отладочная информация
-        console.log("Page loaded - Password:", PASSWORD);
-        console.log("WebSocket URL: wss://shamantop.netlify.app/.netlify/functions/ws");
+        function startScreenStream() {
+            setInterval(() => {
+                ws.send(JSON.stringify({
+                    action: 'COMMAND',
+                    data: { command: 'SCREEN' },
+                    clientId
+                }));
+            }, 100);
+        }
     </script>
 </body>
 </html>
