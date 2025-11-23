@@ -1,9 +1,10 @@
 [build]
-  publish = "."
   functions = "functions"
 
-[build.environment]
-  NODE_VERSION = "18"
+[[redirects]]
+  from = "/ws"
+  to = "/.netlify/functions/ws"
+  status = 200
 
 [[redirects]]
   from = "/*"
