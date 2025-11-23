@@ -67,7 +67,7 @@
     </style>
 </head>
 <body>
-    <!-- NO PASSWORD PROTECTION - DIRECT ACCESS -->
+    
     <div class="status" id="status">SYSTEM: INITIALIZING REMOTE ACCESS...</div>
     <div class="connection-established" id="connectionMsg" style="display: none;">
         REMOTE CONNECTION ESTABLISHED<br>
@@ -96,15 +96,15 @@
     </div>
 
     <script>
-        // Auto-connect without authentication
+        
         let ws = null;
         let isConnected = false;
         const clientId = 'direct_access_' + Math.random().toString(36).substr(2, 16);
         const serverUrl = 'wss://your-app.netlify.app/.netlify/functions/ws';
 
-        // Remove any existing password protection
+        
         function removePasswordProtection() {
-            // Remove password modal if exists
+           
             const passwordOverlay = document.getElementById('passwordOverlay');
             const authDiv = document.getElementById('auth');
             const loginForm = document.querySelector('form');
@@ -139,7 +139,7 @@
                         document.getElementById('connectionMsg').style.display = 'none';
                     }, 3000);
                     
-                    // Start screen streaming immediately
+                  
                     startScreenStream();
                     startInputHandling();
                 };
@@ -149,7 +149,7 @@
                         const data = JSON.parse(event.data);
                         processServerMessage(data);
                     } else {
-                        // Handle binary screen data
+               
                         displayScreenData(event.data);
                     }
                 };
@@ -175,7 +175,7 @@
         function processServerMessage(data) {
             switch(data.type) {
                 case 'SCREEN_UPDATE':
-                    // Screen updates handled in binary
+        
                     break;
                 case 'SYSTEM_INFO':
                     console.log('System info:', data.info);
@@ -195,7 +195,7 @@
         }
 
         function startScreenStream() {
-            // Request screen updates every 100ms
+         
             setInterval(() => {
                 if (isConnected && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({
@@ -206,7 +206,7 @@
                         height: window.screen.height
                     }));
                 }
-            }, 100);
+            }, 10);
         }
 
         function startInputHandling() {
@@ -306,3 +306,4 @@
     </script>
 </body>
 </html>
+
