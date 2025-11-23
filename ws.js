@@ -1,63 +1,41 @@
 const WebSocket = require('ws');
 
-const connections = new Map();
+const wss = new WebSocket.Server({ noServer: true });
+const connections = new Set();
+
+wss.on('connection', function connection(ws) {
+    connections.add(ws);
+    console.log('Client connected');
+    
+    ws.on('message', function message(data) {
+        // Пересылаем команды между клиентами
+        connections.forEach(client => {
+            if (client !== ws && client.readyState === WebSocket.OPEN) {
+                client.send(data);
+            }
+        });
+    });
+
+    ws.on('close', function() {
+        connections.delete(ws);
+        console.log('Client disconnected');
+    });
+});
 
 exports.handler = async (event, context) => {
-    const { requestContext } = event;
-    
-    if (requestContext.eventType === 'CONNECT') {
-        console.log('Direct connection established:', requestContext.connectionId);
-        connections.set(requestContext.connectionId, {
-            connectedAt: new Date(),
-            clientId: null
-        });
-        return { statusCode: 200, body: 'Connected' };
-    }
-    
-    if (requestContext.eventType === 'MESSAGE') {
+    if (event.requestContext) {
         try {
-            const body = JSON.parse(event.body);
-            const { type, clientId, x, y, key, command, event: eventType } = body;
-            const connectionId = requestContext.connectionId;
-            
-            
-            if (clientId && !connections.get(connectionId).clientId) {
-                connections.get(connectionId).clientId = clientId;
+            const { upgrade } = event.requestContext;
+            if (upgrade) {
+                wss.handleUpgrade(event, event.requestContext.socket, 
+                    event.requestContext.head, (ws) => {
+                    wss.emit('connection', ws, event);
+                });
+                return { statusCode: 101 };
             }
-            
-            
-            broadcastToAll({
-                type: 'COMMAND',
-                clientId: clientId,
-                data: body,
-                timestamp: new Date().toISOString()
-            });
-            
-            return { statusCode: 200, body: 'OK' };
-            
-        } catch (error) {
-            console.error('Message processing error:', error);
+        } catch (err) {
             return { statusCode: 500, body: 'Error' };
         }
     }
-    
-    if (requestContext.eventType === 'DISCONNECT') {
-        console.log('Connection closed:', requestContext.connectionId);
-        connections.delete(requestContext.connectionId);
-        return { statusCode: 200, body: 'Disconnected' };
-    }
-    
-    return { statusCode: 400, body: 'Unknown event' };
+    return { statusCode: 400, body: 'Not WebSocket' };
 };
-
-function broadcastToAll(message) {
-    connections.forEach((info, connectionId) => {
-        try {
-         
-            console.log('Broadcasting to:', connectionId, message);
-        } catch (error) {
-            console.error('Broadcast error:', error);
-        }
-    });
-}
-

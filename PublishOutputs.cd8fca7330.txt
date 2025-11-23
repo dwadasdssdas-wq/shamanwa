@@ -1,0 +1,2 @@
+C:\Users\Шамиль\Desktop\python\dist\TempApp.pdb
+C:\Users\Шамиль\Desktop\python\dist\TempApp.exe
